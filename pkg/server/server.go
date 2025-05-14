@@ -1,6 +1,7 @@
 package server
 
 import (
+	"diploma/pkg/api"
 	"fmt"
 	"net/http"
 	"os"
@@ -9,6 +10,8 @@ import (
 func Run() error {
 	webDir := "web"
 	port := "7540"
+
+	api.Init()
 
 	if envPort := os.Getenv("TODO_PORT"); envPort != "" {
 		port = envPort
