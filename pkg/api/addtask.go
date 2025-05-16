@@ -37,7 +37,7 @@ func addTaskHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func checkDate(task *db.Task) error {
-	now := time.Now()
+	now := time.Now().Truncate(24 * time.Hour)
 
 	if task.Date == "" {
 		task.Date = now.Format(dateFormat)
@@ -48,16 +48,19 @@ func checkDate(task *db.Task) error {
 		return fmt.Errorf("неверный формат даты")
 	}
 
-	if task.Repeat != "" {
-		next, err := NextDate(now, task.Date, task.Repeat)
-		if err != nil {
-			return fmt.Errorf("ошибка в repeat: %w", err)
-		}
-		if !afterNow(t, now) {
+	t = t.Truncate(24 * time.Hour)
+
+	// Пересчитываем только если дата МЕНЬШЕ today
+	if t.Before(now) {
+		if task.Repeat == "" {
+			task.Date = now.Format(dateFormat)
+		} else {
+			next, err := NextDate(now, task.Date, task.Repeat)
+			if err != nil {
+				return fmt.Errorf("ошибка в repeat: %w", err)
+			}
 			task.Date = next
 		}
-	} else if !afterNow(t, now) {
-		task.Date = now.Format(dateFormat)
 	}
 
 	return nil

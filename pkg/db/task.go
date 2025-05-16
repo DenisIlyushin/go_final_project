@@ -2,6 +2,7 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -14,25 +15,12 @@ type Task struct {
 	Repeat  string `json:"repeat"`
 }
 
-func AddTask(task *Task) (int64, error) {
-	query := `
-		INSERT INTO scheduler (date, title, comment, repeat)
-		VALUES (?, ?, ?, ?)
-	`
-	res, err := DB.Exec(query, task.Date, task.Title, task.Comment, task.Repeat)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
-}
-
 func Tasks(limit int, search string) ([]*Task, error) {
 	var rows *sql.Rows
 	var err error
 
 	if search != "" {
 		if t, errDate := time.Parse("02.01.2006", search); errDate == nil {
-			// Поиск по дате
 			date := t.Format("20060102")
 			rows, err = DB.Query(`
 				SELECT id, date, title, comment, repeat
@@ -41,7 +29,6 @@ func Tasks(limit int, search string) ([]*Task, error) {
 				ORDER BY date
 				LIMIT ?`, date, limit)
 		} else {
-			// Поиск по словам в title и comment, нечувствительно к регистру
 			words := strings.Fields(search)
 			if len(words) == 0 {
 				return defaultTasks(limit)
@@ -81,6 +68,54 @@ func Tasks(limit int, search string) ([]*Task, error) {
 	}
 
 	return list, nil
+}
+
+func AddTask(task *Task) (int64, error) {
+	query := `
+		INSERT INTO scheduler (date, title, comment, repeat)
+		VALUES (?, ?, ?, ?)
+	`
+	res, err := DB.Exec(query, task.Date, task.Title, task.Comment, task.Repeat)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func GetTask(id string) (*Task, error) {
+	row := DB.QueryRow(`
+		SELECT id, date, title, comment, repeat
+		FROM scheduler
+		WHERE id = ?`, id)
+
+	var t Task
+	if err := row.Scan(&t.ID, &t.Date, &t.Title, &t.Comment, &t.Repeat); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("Задача не найдена")
+		}
+		return nil, err
+	}
+	return &t, nil
+}
+
+func UpdateTask(task *Task) error {
+	query := `
+		UPDATE scheduler
+		SET date = ?, title = ?, comment = ?, repeat = ?
+		WHERE id = ?
+	`
+	res, err := DB.Exec(query, task.Date, task.Title, task.Comment, task.Repeat, task.ID)
+	if err != nil {
+		return err
+	}
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf("Задача не найдена")
+	}
+	return nil
 }
 
 func defaultTasks(limit int) ([]*Task, error) {
