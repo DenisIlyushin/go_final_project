@@ -16,8 +16,31 @@ func afterNow(a, b time.Time) bool {
 	return a.After(b)
 }
 
-func lastDayOfMonth(t time.Time) int {
-	return time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, t.Location()).Day()
+func nextDateHandler(w http.ResponseWriter, r *http.Request) {
+	nowStr := r.FormValue("now")
+	date := r.FormValue("date")
+	repeat := r.FormValue("repeat")
+
+	var now time.Time
+	var err error
+	if nowStr == "" {
+		now = time.Now()
+	} else {
+		now, err = time.Parse(dateFormat, nowStr)
+		if err != nil {
+			writeJson(w, map[string]string{"error": "неправильный формат now"})
+			return
+		}
+	}
+
+	next, err := NextDate(now, date, repeat)
+	if err != nil {
+		writeJson(w, map[string]string{"error": err.Error()})
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
+	json.NewEncoder(w).Encode(next) // именно строка, а не {"date": ...}
 }
 
 func NextDate(now time.Time, dstart string, repeat string) (string, error) {
@@ -68,7 +91,7 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			if err != nil || n < 1 || n > 7 {
 				return "", fmt.Errorf("некорректный день недели: %s", d)
 			}
-			valid[time.Weekday((n+6)%7)] = true // Go: 0=Sunday, а у нас 1=Monday
+			valid[time.Weekday((n+6)%7)] = true
 		}
 		date := start
 		for {
@@ -83,7 +106,6 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 		if len(parts) < 2 {
 			return "", fmt.Errorf("неправильный формат m")
 		}
-
 		daySet := make(map[int]bool)
 		for _, s := range strings.Split(parts[1], ",") {
 			var d int
@@ -93,7 +115,6 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 			}
 			daySet[d] = true
 		}
-
 		monthSet := make(map[time.Month]bool)
 		if len(parts) > 2 {
 			for _, s := range strings.Split(parts[2], ",") {
@@ -105,24 +126,20 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 				monthSet[time.Month(m)] = true
 			}
 		}
-
 		date := start
 		for {
 			if afterNow(date, now) {
 				m := date.Month()
 				if len(monthSet) > 0 && !monthSet[m] {
-					goto nextDay
+					date = date.AddDate(0, 0, 1)
+					continue
 				}
 				day := date.Day()
 				last := lastDayOfMonth(date)
-
-				if daySet[day] ||
-					(daySet[-1] && day == last) ||
-					(daySet[-2] && day == last-1) {
+				if daySet[day] || (daySet[-1] && day == last) || (daySet[-2] && day == last-1) {
 					break
 				}
 			}
-		nextDay:
 			date = date.AddDate(0, 0, 1)
 		}
 		return date.Format(dateFormat), nil
@@ -134,36 +151,6 @@ func NextDate(now time.Time, dstart string, repeat string) (string, error) {
 	return start.Format(dateFormat), nil
 }
 
-func nextDateHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
-
-	nowStr := r.FormValue("now")
-	date := r.FormValue("date")
-	repeat := r.FormValue("repeat")
-
-	var now time.Time
-	var err error
-	if nowStr == "" {
-		now = time.Now()
-	} else {
-		now, err = time.Parse(dateFormat, nowStr)
-		if err != nil {
-			json.NewEncoder(w).Encode(map[string]string{
-				"error": "неправильный формат now",
-			})
-			return
-		}
-	}
-
-	next, err := NextDate(now, date, repeat)
-	if err != nil {
-		json.NewEncoder(w).Encode(map[string]string{
-			"error": err.Error(),
-		})
-		return
-	}
-
-	json.NewEncoder(w).Encode(map[string]string{
-		"date": next,
-	})
+func lastDayOfMonth(t time.Time) int {
+	return time.Date(t.Year(), t.Month()+1, 0, 0, 0, 0, 0, t.Location()).Day()
 }
