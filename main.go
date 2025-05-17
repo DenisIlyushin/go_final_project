@@ -14,7 +14,6 @@ func main() {
 
 	// Инициализируем базу
 	db, err := database.OpenDatabase(config.DatabasePath)
-
 	if err != nil {
 		log.Fatal(err)
 	}

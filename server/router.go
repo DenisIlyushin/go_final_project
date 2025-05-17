@@ -14,7 +14,7 @@ func serveTaskRouter(handler *handlers.TaskHandler) *chi.Mux {
 
 	router.Handle("/*", http.StripPrefix("/", http.FileServer(http.Dir(config.FrontendPath))))
 
-	//router.Get("/api/nextdate", handler.NextDateHandler)
+	router.Get("/api/nextdate", handler.NextDate)
 	//
 	//router.Post("/api/task", handler.PostTask)
 	//router.Get("/api/tasks", handler.GetTasksHandler)
