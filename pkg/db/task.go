@@ -98,9 +98,29 @@ func GetTask(id string) (*Task, error) {
 	return &t, nil
 }
 
+func UpdateDate(date, id string) error {
+	res, err := DB.Exec("UPDATE scheduler SET date = ? WHERE id = ?", date, id)
+	if err != nil {
+		return err
+	}
+	count, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		return fmt.Errorf("задача не найдена")
+	}
+	return nil
+}
+
+func DeleteTask(id string) error {
+	_, err := DB.Exec("DELETE FROM scheduler WHERE id = ?", id)
+	return err
+}
+
 func UpdateTask(task *Task) error {
 	query := `
-		UPDATE scheduler
+		UPDATE scheduler 
 		SET date = ?, title = ?, comment = ?, repeat = ?
 		WHERE id = ?
 	`
@@ -113,7 +133,7 @@ func UpdateTask(task *Task) error {
 		return err
 	}
 	if count == 0 {
-		return fmt.Errorf("Задача не найдена")
+		return fmt.Errorf("задача не найдена")
 	}
 	return nil
 }
