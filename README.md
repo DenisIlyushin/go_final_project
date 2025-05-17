@@ -62,7 +62,7 @@ go test -run ^TestNextDate$ ./tests
 ```
 ## 4
 ```bash
-
+go test -run ^TestAddTask$ ./tests
 ```
 ## 5
 ```bash
