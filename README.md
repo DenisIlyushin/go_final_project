@@ -66,7 +66,7 @@ go test -run ^TestAddTask$ ./tests
 ```
 ## 5
 ```bash
-
+go test -run ^TestTasks$ ./tests
 ```
 ## 6
 ```bash

@@ -13,12 +13,16 @@ import (
 )
 
 const (
-	ErrMissingParams  = "не заданы необходимые параметры"
-	ErrInvalidNowDate = "некорректный формат текущей даты"
-	ErrInvalidDate    = "некорректный формат даты задачи"
-	ErrDecodeBody     = "не удалось декодировать тело запроса"
-	ErrEmptyTitle     = "название задачи не может быть пустым"
-	ErrInternalCreate = "внутренняя ошибка сервера при создании задачи"
+	ErrMissingParams    = "не заданы необходимые параметры"
+	ErrInvalidNowDate   = "некорректный формат текущей даты"
+	ErrInvalidDate      = "некорректный формат даты задачи"
+	ErrDecodeBody       = "не удалось декодировать тело запроса"
+	ErrEmptyTitle       = "название задачи не может быть пустым"
+	ErrInternalCreate   = "не удалось создать задачу"
+	ErrMethodNotAllowed = "метод не поддерживается"
+	ErrGetTasksDB       = "не удалось получить список задач"
+	ErrGetTaskDB        = "не удалось получить задачу"
+	ErrEncodeResponse   = "не удалось сформировать ответ"
 )
 
 // TaskHandler обрабатывает HTTP-запросы, связанные с задачами.
@@ -27,13 +31,22 @@ type TaskHandler struct {
 	Settings *config.Settings
 }
 
-// NewTaskHandler создает новый обработчик задач.
+// NewTaskHandler создаёт новый экземпляр TaskHandler с заданным подключением к БД и настройками.
 func NewTaskHandler(db *database.Database, settings *config.Settings) *TaskHandler {
 	return &TaskHandler{DB: db, Settings: settings}
 }
 
 // NextDate обрабатывает GET-запрос и возвращает следующую дату выполнения задачи.
+// Параметры запроса:
+// - now: текущая дата в формате YYYYMMDD
+// - date: исходная дата задачи в формате YYYYMMDD
+// - repeat: правило повторения
+// В ответ возвращается JSON {"nextDate":"YYYYMMDD"} или {"error":"..."}.
 func (h *TaskHandler) NextDate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
+		return
+	}
 	nowParam := r.FormValue("now")
 	dateParam := r.FormValue("date")
 	repeatParam := r.FormValue("repeat")
@@ -41,15 +54,15 @@ func (h *TaskHandler) NextDate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrMissingParams})
 		return
 	}
-	parseDate := func(val string) (time.Time, error) {
+	parse := func(val string) (time.Time, error) {
 		return time.Parse(config.DateFormat, val)
 	}
-	nowTime, err := parseDate(nowParam)
+	nowTime, err := parse(nowParam)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrInvalidNowDate})
 		return
 	}
-	if _, err := parseDate(dateParam); err != nil {
+	if _, err := parse(dateParam); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrInvalidDate})
 		return
 	}
@@ -62,7 +75,13 @@ func (h *TaskHandler) NextDate(w http.ResponseWriter, r *http.Request) {
 }
 
 // CreateTask обрабатывает POST-запрос на создание новой задачи.
+// В теле запроса ожидается JSON с полями модели Task.
+// В ответ возвращается JSON {"id":<ID>} или {"error":"..."}.
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
+		return
+	}
 	var task models.Task
 	if err := json.NewDecoder(r.Body).Decode(&task); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrDecodeBody})
@@ -76,15 +95,13 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	if task.Date == "" || strings.EqualFold(task.Date, "today") {
 		task.Date = now.Format(config.DateFormat)
 	}
-	parsedDate, err := time.Parse(config.DateFormat, task.Date)
-	if err != nil {
+	if _, err := time.Parse(config.DateFormat, task.Date); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrInvalidDate})
 		return
 	}
-	// Если дата раньше текущей
-	if parsedDate.Before(now) {
+	parsed, _ := time.Parse(config.DateFormat, task.Date)
+	if parsed.Before(now) {
 		if task.Repeat == "" {
-			// устанавливаем на сегодня
 			task.Date = now.Format(config.DateFormat)
 		} else {
 			next, err := utils.NextDate(now, task.Date, task.Repeat)
@@ -95,7 +112,6 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 			task.Date = next
 		}
 	}
-
 	id, err := h.DB.CreateTask(task)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrInternalCreate})
@@ -104,9 +120,49 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-// writeJSON устанавливает заголовок Content-Type, статус и кодирует data в JSON.
+// GetTasks обрабатывает GET-запрос и возвращает список задач.
+// Опциональный параметр search фильтрует задачи по дате (формат YYYYMMDD или DD.MM.YYYY)
+// или по вхождению в title/comment.
+func (h *TaskHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
+		return
+	}
+	search := r.URL.Query().Get("search")
+	if search != "" {
+		if t, err := time.Parse("02.01.2006", search); err == nil {
+			search = t.Format(config.DateFormat)
+		}
+	}
+	tasks, err := h.DB.GetTasks(search)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrGetTasksDB})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{"tasks": tasks})
+}
+
+// GetTask обрабатывает GET-запрос и возвращает задачу по её ID.
+// Ожидается параметр id в query.
+func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
+		return
+	}
+	id := r.URL.Query().Get("id")
+	task, err := h.DB.GetTask(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrGetTaskDB})
+		return
+	}
+	writeJSON(w, http.StatusOK, task)
+}
+
+// writeJSON устанавливает заголовок Content-Type, статус и кодирует ответ в JSON.
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(data)
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		http.Error(w, ErrEncodeResponse, http.StatusInternalServerError)
+	}
 }
