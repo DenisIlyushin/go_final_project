@@ -1,10 +1,9 @@
-module diploma
+module github.com/DenisIlyushin/go_final_project
 
 go 1.23.4
 
-//replace diploma => ./
-
 require (
+	github.com/go-chi/chi/v5 v5.2.1
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/stretchr/testify v1.10.0

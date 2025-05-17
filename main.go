@@ -1,29 +1,26 @@
 package main
 
 import (
-	"diploma/pkg/db"
-	"diploma/pkg/server"
-	"github.com/joho/godotenv"
 	"log"
-	"os"
+
+	"github.com/DenisIlyushin/go_final_project/config"
+	"github.com/DenisIlyushin/go_final_project/database"
+	"github.com/DenisIlyushin/go_final_project/server"
 )
 
 func main() {
-	// Загружаем переменные окружения из .env
-	if err := godotenv.Load(); err != nil {
-		log.Println("Нет .env файла, использую переменные окружения из системы")
+	// Применяем конфиг
+	config := config.LoadConfig()
+
+	// Инициализируем базу
+	db, err := database.OpenDatabase(config.DatabasePath)
+
+	if err != nil {
+		log.Fatal(err)
 	}
 
-	dbFile := os.Getenv("TODO_DBFILE")
-	if dbFile == "" {
-		dbFile = "scheduler.db"
-	}
-
-	if err := db.Init(dbFile); err != nil {
-		log.Fatal("Ошибка инициализации БД:", err)
-	}
-
-	if err := server.Run(); err != nil {
+	// Запускаем сервер
+	if err := server.Run(db, config); err != nil {
 		log.Fatal(err)
 	}
 }

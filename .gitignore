@@ -32,3 +32,4 @@ remind.me
 /remind.me
 /.idea/vcs.xml
 _junk.go
+/old_pkg/
