@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        TODO_PORT: ${TODO_PORT:-7540}
+        TODO_DBFILE: ${TODO_DBFILE:-scheduler.db}
+        TODO_PASSWORD: ${TODO_PASSWORD}
+    image: go_final_app:latest
+    container_name: go_final_app
+    env_file:
+      - .env
+    ports:
+      - "7540:${TODO_PORT:-7540}"
+    environment:
+      - TODO_PORT=${TODO_PORT:-7540}
+      - TODO_DBFILE=${TODO_DBFILE:-scheduler.db}
+      - TODO_PASSWORD=${TODO_PASSWORD}
+    volumes:
+      # монтируем фронтенд в режиме только для чтения
+      - ./web:/app/web:ro
+      # монтируем базу (файл или папку с БД) для сохранения данных
+      - ./${TODO_DBFILE:-scheduler.db}:/app/${TODO_DBFILE:-scheduler.db}
+    restart: unless-stopped
