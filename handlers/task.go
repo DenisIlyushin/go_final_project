@@ -13,40 +13,39 @@ import (
 )
 
 const (
-	ErrMissingParams    = "не заданы необходимые параметры"
-	ErrInvalidNowDate   = "некорректный формат текущей даты"
-	ErrInvalidDate      = "некорректный формат даты задачи"
-	ErrInvalidJSON      = "неверный формат JSON"
-	ErrDecodeBody       = "не удалось декодировать тело запроса"
-	ErrEmptyTitle       = "название задачи не может быть пустым"
-	ErrInternalCreate   = "не удалось создать задачу"
-	ErrMethodNotAllowed = "метод не поддерживается"
-	ErrGetTasksDB       = "не удалось получить список задач"
-	ErrGetTaskDB        = "не удалось получить задачу"
-	ErrEncodeResponse   = "не удалось сформировать ответ"
-	ErrDBUpdate         = "не удалось обновить задачу"
+	ErrMissingParams    = "обязательные параметры запроса не заданы: now, date, repeat"
+	ErrInvalidNowDate   = "текущая дата имеет неверный формат, ожидается YYYYMMDD"
+	ErrInvalidDate      = "дата задачи имеет неверный формат, ожидается YYYYMMDD"
+	ErrInvalidJSON      = "некорректный JSON в теле запроса"
+	ErrDecodeBody       = "ошибка декодирования тела запроса"
+	ErrEmptyTitle       = "поле Title не может быть пустым"
+	ErrInternalCreate   = "ошибка при создании задачи"
+	ErrMethodNotAllowed = "метод запроса не поддерживается"
+	ErrGetTasksDB       = "ошибка при получении списка задач"
+	ErrGetTaskDB        = "ошибка при получении задачи"
+	ErrEncodeResponse   = "ошибка при формировании JSON-ответа"
+	ErrDBUpdate         = "ошибка при обновлении задачи"
 	ErrMissingID        = "не указан идентификатор задачи"
-	ErrDBDelete         = "не удалось удалить задачу"
-	ErrDBDone           = "не удалось отметить задачу выполненной"
+	ErrDBDelete         = "ошибка при удалении задачи"
+	ErrDBDone           = "ошибка при завершении задачи"
 )
 
 // TaskHandler обрабатывает HTTP-запросы, связанные с задачами.
+// DB — подключение к базе данных, Settings — настройки приложения.
 type TaskHandler struct {
 	DB       *database.Database
 	Settings *config.Settings
 }
 
-// NewTaskHandler создаёт новый экземпляр TaskHandler с заданным подключением к БД и настройками.
+// NewTaskHandler создаёт TaskHandler с указанными подключением к БД и настройками.
 func NewTaskHandler(db *database.Database, settings *config.Settings) *TaskHandler {
 	return &TaskHandler{DB: db, Settings: settings}
 }
 
-// NextDate обрабатывает GET-запрос и возвращает следующую дату выполнения задачи.
-// Параметры запроса:
-// - now: текущая дата в формате YYYYMMDD
-// - date: исходная дата задачи в формате YYYYMMDD
-// - repeat: правило повторения
-// В ответ возвращается JSON {"nextDate":"YYYYMMDD"} или {"error":"..."}.
+// NextDate возвращает следующую дату выполнения задачи в формате YYYYMMDD.
+// Ожидает GET-параметры now (текущая дата YYYYMMDD), date (дата задачи YYYYMMDD), repeat (правило повторения).
+// При ошибке возвращает JSON {"error": "..."} и соответствующий HTTP статус.
+// При успешном вычислении возвращает plain text с датой и статус 200.
 func (h *TaskHandler) NextDate(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
@@ -76,12 +75,14 @@ func (h *TaskHandler) NextDate(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"nextDate": next})
+	// возвращаем только строку даты
+	w.Header().Set("Content-Type", "text/plain; charset=UTF-8")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(next))
 }
 
-// CreateTask обрабатывает POST-запрос на создание новой задачи.
-// В теле запроса ожидается JSON с полями модели Task.
-// В ответ возвращается JSON {"id":<ID>} или {"error":"..."}.
+// CreateTask создаёт новую задачу.
+// Ожидает POST с JSON модели Task. В ответе JSON {"id":ID} или {"error":"..."}.
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
@@ -125,9 +126,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]int64{"id": id})
 }
 
-// GetTasks обрабатывает GET-запрос и возвращает список задач.
-// Опциональный параметр search фильтрует задачи по дате (формат YYYYMMDD или DD.MM.YYYY)
-// или по вхождению в title/comment.
+// GetTasks возвращает список задач. Опционально по search фильтрует по дате (YYYYMMDD или DD.MM.YYYY) или вхождению текста.
 func (h *TaskHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
@@ -147,8 +146,7 @@ func (h *TaskHandler) GetTasks(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{"tasks": tasks})
 }
 
-// GetTask обрабатывает GET-запрос и возвращает задачу по её ID.
-// Ожидается параметр id в query.
+// GetTask возвращает задачу по её идентификатору из query id.
 func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
@@ -163,9 +161,8 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, task)
 }
 
-// UpdateTask обрабатывает PUT /api/task и обновляет задачу.
-// В теле JSON c полями модели Task (включая id).
-// В ответе пустой JSON {} или {"error":"..."}.
+// UpdateTask обновляет существующую задачу.
+// Ожидает PUT с JSON модели Task (включая id). Возвращает {} или {"error":"..."}.
 func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
@@ -188,8 +185,7 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
-// DeleteTask обрабатывает DELETE /api/task?id=<ID>.
-// В случае успеха возвращает {}, иначе {"error":"…"}.
+// DeleteTask удаляет задачу по id из query. Возвращает {} или {"error":"..."}.
 func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
@@ -207,9 +203,8 @@ func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
-// CompleteTask обрабатывает POST /api/task/done?id=<ID>:
-// • если task.Repeat == "", удаляет задачу;
-// • иначе вычисляет новую дату через utils.NextDate и вызывает EditTask.
+// CompleteTask отмечает задачу выполненной: одноразовые удаляются, периодические получают новую дату.
+// Ожидает POST /api/task/done?id=<ID>.
 func (h *TaskHandler) CompleteTask(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
@@ -226,13 +221,11 @@ func (h *TaskHandler) CompleteTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if task.Repeat == "" {
-		// одноразовая – удаляем
 		if err := h.DB.DeleteTask(id); err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrDBDone})
 			return
 		}
 	} else {
-		// периодическая – вычисляем дату и обновляем
 		next, err := utils.NextDate(time.Now(), task.Date, task.Repeat)
 		if err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
@@ -247,7 +240,7 @@ func (h *TaskHandler) CompleteTask(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
-// writeJSON устанавливает заголовок Content-Type, статус и кодирует ответ в JSON.
+// writeJSON устанавливает Content-Type, статус и кодирует data в JSON.
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json; charset=UTF-8")
 	w.WriteHeader(status)
