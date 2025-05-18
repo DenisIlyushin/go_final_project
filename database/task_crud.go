@@ -114,3 +114,23 @@ func (d *Database) GetTask(idStr string) (models.Task, error) {
 
 	return t, nil
 }
+
+// GetTask возвращает задачу по её строковому ID.
+func (d *Database) EditTask(task models.Task) error {
+
+	result, err := d.db.Exec("UPDATE scheduler SET date=?, title=?, comment=?, repeat=? WHERE id=?",
+		task.Date, task.Title, task.Comment, task.Repeat, task.ID)
+	if err != nil {
+		return fmt.Errorf("execution error: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("rows affected error: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("task with id %v not found", task.ID)
+	}
+	return nil
+}

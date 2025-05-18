@@ -70,7 +70,7 @@ go test -run ^TestTasks$ ./tests
 ```
 ## 6
 ```bash
-
+go test -run ^TestEditTask$ ./tests
 ```
 ## 7
 ```bash

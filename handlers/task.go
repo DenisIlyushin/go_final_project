@@ -16,6 +16,7 @@ const (
 	ErrMissingParams    = "не заданы необходимые параметры"
 	ErrInvalidNowDate   = "некорректный формат текущей даты"
 	ErrInvalidDate      = "некорректный формат даты задачи"
+	ErrInvalidJSON      = "неверный формат JSON"
 	ErrDecodeBody       = "не удалось декодировать тело запроса"
 	ErrEmptyTitle       = "название задачи не может быть пустым"
 	ErrInternalCreate   = "не удалось создать задачу"
@@ -23,6 +24,7 @@ const (
 	ErrGetTasksDB       = "не удалось получить список задач"
 	ErrGetTaskDB        = "не удалось получить задачу"
 	ErrEncodeResponse   = "не удалось сформировать ответ"
+	ErrDBUpdate         = "не удалось обновить задачу"
 )
 
 // TaskHandler обрабатывает HTTP-запросы, связанные с задачами.
@@ -156,6 +158,31 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, task)
+}
+
+// UpdateTask обрабатывает PUT /api/task и обновляет задачу.
+// В теле JSON c полями модели Task (включая id).
+// В ответе пустой JSON {} или {"error":"..."}.
+func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
+		return
+	}
+	var t models.Task
+	if err := json.NewDecoder(r.Body).Decode(&t); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrInvalidJSON})
+		return
+	}
+	now := time.Now().Format(config.DateFormat)
+	if err := utils.ValidateTask(&t, now); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+	if err := h.DB.EditTask(t); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrDBUpdate})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{})
 }
 
 // writeJSON устанавливает заголовок Content-Type, статус и кодирует ответ в JSON.
