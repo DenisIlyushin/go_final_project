@@ -11,11 +11,13 @@ const (
 	noEnvWarning  = "no .env file found, using system environment"
 	noPortWarning = "TODO_PORT not set, using default"
 	noPathWarning = "TODO_DBFILE not set, using default"
+	noPassWarning = "TODO_PASSWORD not set, using default"
 )
 
 type Settings struct {
 	ServerPort   string
 	DatabasePath string
+	AuthPassword string
 }
 
 // NewConfig загружает переменные окружения из файла .env (если он существует)
@@ -29,6 +31,7 @@ func LoadConfig() *Settings {
 	return &Settings{
 		ServerPort:   getenv("TODO_PORT", DefaultPort, noPortWarning),
 		DatabasePath: getenv("TODO_DBFILE", DefaultDatabasePath, noPathWarning),
+		AuthPassword: getenv("TODO_PASSWORD", DefaultAuthPassword, noPassWarning),
 	}
 }
 

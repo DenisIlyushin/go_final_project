@@ -12,7 +12,7 @@ import (
 func Run(database *database.Database, settings *config.Settings) error {
 
 	taskHandler := handlers.NewTaskHandler(database, settings)
-	router := serveTaskRouter(taskHandler)
+	router := serveTaskRouter(taskHandler, settings)
 
 	log.Println("Сервер запущен на порту:", settings.ServerPort)
 	return http.ListenAndServe(":"+settings.ServerPort, router)
