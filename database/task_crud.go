@@ -60,18 +60,22 @@ func (d *Database) GetTasks(searchQuery string) ([]models.Task, error) {
 	switch {
 	case searchQuery == "":
 		rows, err = d.db.Query(
-			"SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT ?", config.TasksLimit)
+			"SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT ?",
+			config.TasksLimit)
 	default:
 		if t, perr := time.Parse(config.DateFormat, searchQuery); perr == nil {
 			// поиск по дате
 			rows, err = d.db.Query(
 				"SELECT id, date, title, comment, repeat FROM scheduler WHERE date = ? ORDER BY date LIMIT ?",
-				t.Format(config.DateFormat), config.TasksLimit)
+				t.Format(config.DateFormat),
+				config.TasksLimit)
 		} else {
 			pattern := "%" + searchQuery + "%"
 			rows, err = d.db.Query(
 				"SELECT id, date, title, comment, repeat FROM scheduler WHERE title LIKE ? OR comment LIKE ? ORDER BY date LIMIT ?",
-				pattern, pattern, config.TasksLimit)
+				pattern,
+				pattern,
+				config.TasksLimit)
 		}
 	}
 	if err != nil {
