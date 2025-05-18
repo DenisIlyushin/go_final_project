@@ -115,7 +115,6 @@ func (d *Database) GetTask(idStr string) (models.Task, error) {
 	return t, nil
 }
 
-// GetTask возвращает задачу по её строковому ID.
 func (d *Database) EditTask(task models.Task) error {
 
 	result, err := d.db.Exec("UPDATE scheduler SET date=?, title=?, comment=?, repeat=? WHERE id=?",
@@ -131,6 +130,27 @@ func (d *Database) EditTask(task models.Task) error {
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("task with id %v not found", task.ID)
+	}
+	return nil
+}
+
+// DeleteTask удаляет задачу по её строковому ID.
+// Если задача не найдена, возвращает ошибку.
+func (d *Database) DeleteTask(idStr string) error {
+	// Пытаемся удалить строку
+	result, err := d.db.Exec(
+		"DELETE FROM scheduler WHERE id = ?", idStr,
+	)
+	if err != nil {
+		return fmt.Errorf("не удалось удалить задачу: %w", err)
+	}
+	// Проверяем, сколько строк затронуто
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("не удалось узнать количество удалённых задач: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("задача с ID %s не найдена", idStr)
 	}
 	return nil
 }

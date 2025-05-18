@@ -20,8 +20,8 @@ func serveTaskRouter(handler *handlers.TaskHandler) *chi.Mux {
 	router.Get("/api/tasks", handler.GetTasks)
 	router.Get("/api/task", handler.GetTask)
 	router.Put("/api/task", handler.UpdateTask)
-	//router.Post("/api/task/done", handler.DoneTaskHandler)
-	//router.Delete("/api/task", handler.DeleteTaskHandler)
+	router.Post("/api/task/done", handler.CompleteTask)
+	router.Delete("/api/task", handler.DeleteTask)
 
 	return router
 }

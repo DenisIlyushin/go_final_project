@@ -74,7 +74,8 @@ go test -run ^TestEditTask$ ./tests
 ```
 ## 7
 ```bash
-
+go test -run ^TestDone$ ./tests
+go test -run ^TestDelTask$ ./tests
 ```
 ## 8
 ```bash

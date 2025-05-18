@@ -25,6 +25,9 @@ const (
 	ErrGetTaskDB        = "не удалось получить задачу"
 	ErrEncodeResponse   = "не удалось сформировать ответ"
 	ErrDBUpdate         = "не удалось обновить задачу"
+	ErrMissingID        = "не указан идентификатор задачи"
+	ErrDBDelete         = "не удалось удалить задачу"
+	ErrDBDone           = "не удалось отметить задачу выполненной"
 )
 
 // TaskHandler обрабатывает HTTP-запросы, связанные с задачами.
@@ -181,6 +184,65 @@ func (h *TaskHandler) UpdateTask(w http.ResponseWriter, r *http.Request) {
 	if err := h.DB.EditTask(t); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrDBUpdate})
 		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+// DeleteTask обрабатывает DELETE /api/task?id=<ID>.
+// В случае успеха возвращает {}, иначе {"error":"…"}.
+func (h *TaskHandler) DeleteTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrMissingID})
+		return
+	}
+	if err := h.DB.DeleteTask(id); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrDBDelete})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{})
+}
+
+// CompleteTask обрабатывает POST /api/task/done?id=<ID>:
+// • если task.Repeat == "", удаляет задачу;
+// • иначе вычисляет новую дату через utils.NextDate и вызывает EditTask.
+func (h *TaskHandler) CompleteTask(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]string{"error": ErrMethodNotAllowed})
+		return
+	}
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": ErrMissingID})
+		return
+	}
+	task, err := h.DB.GetTask(id)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrDBDone})
+		return
+	}
+	if task.Repeat == "" {
+		// одноразовая – удаляем
+		if err := h.DB.DeleteTask(id); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrDBDone})
+			return
+		}
+	} else {
+		// периодическая – вычисляем дату и обновляем
+		next, err := utils.NextDate(time.Now(), task.Date, task.Repeat)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+		task.Date = next
+		if err := h.DB.EditTask(task); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": ErrDBDone})
+			return
+		}
 	}
 	writeJSON(w, http.StatusOK, map[string]interface{}{})
 }
