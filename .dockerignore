@@ -1,0 +1,13 @@
+# Игнорируем все по умолчанию
+**/*
+# Разрешаем необходимые файлы и папки для сборки
+!go.mod
+!go.sum
+!main.go
+!auth/**
+!config/**
+!database/**
+!handlers/**
+!models/**
+!server/**
+!utils/**
